@@ -71,6 +71,37 @@ internal sealed class MihoRoleFamily
 	internal List<HediffDef> AllRoleDefs { get; }
 }
 
+internal sealed class MihoRuleRuntime
+{
+	internal MihoRuleRuntime(CheckHediffMakeHediffDef rule, HediffDef[] sourceDefs, HediffDef[] targetDefs, MihoRoleFamily startRoleFamily)
+	{
+		Rule = rule;
+		DefName = rule.defName;
+		SourceDefs = sourceDefs;
+		TargetDefs = targetDefs;
+		ResetTicks = Math.Max(rule.tickMultiflier, MihoFixState.AggregatorBucketTicks);
+		Severity = rule.hediffSeverity;
+		StartRoleFamily = startRoleFamily;
+		IsNoJobRule = DefName == MihoFixState.NoJobRuleDefName;
+	}
+
+	internal string DefName { get; }
+
+	internal bool IsNoJobRule { get; }
+
+	internal CheckHediffMakeHediffDef Rule { get; }
+
+	internal HediffDef[] SourceDefs { get; }
+
+	internal HediffDef[] TargetDefs { get; }
+
+	internal int ResetTicks { get; }
+
+	internal float Severity { get; }
+
+	internal MihoRoleFamily StartRoleFamily { get; }
+}
+
 internal static class MihoFixState
 {
 	internal const string NoJobRuleDefName = "Miho_CheckHediffMakeHediff_Nojob";
@@ -95,7 +126,7 @@ internal static class MihoFixState
 		"V"
 	};
 
-	internal static readonly Dictionary<ThingDef, List<CheckHediffMakeHediffDef>> RulesByRace = new Dictionary<ThingDef, List<CheckHediffMakeHediffDef>>();
+	internal static readonly Dictionary<ThingDef, MihoRuleRuntime[]> RulesByRace = new Dictionary<ThingDef, MihoRuleRuntime[]>();
 	internal static readonly List<MihoRoleFamily> RoleFamilies = new List<MihoRoleFamily>();
 	internal static readonly Dictionary<HediffDef, MihoRoleFamily> RoleFamilyByRoleHediff = new Dictionary<HediffDef, MihoRoleFamily>();
 	internal static readonly Dictionary<HediffDef, MihoRoleFamily> RoleFamilyByTrigger = new Dictionary<HediffDef, MihoRoleFamily>();
@@ -112,6 +143,7 @@ internal static class MihoFixState
 		TierLevelByDef.Clear();
 		NoJobHediffDef = DefDatabase<HediffDef>.GetNamedSilentFail("Miho_Nojob");
 
+		Dictionary<ThingDef, List<CheckHediffMakeHediffDef>> rawRulesByRace = new Dictionary<ThingDef, List<CheckHediffMakeHediffDef>>();
 		foreach (CheckHediffMakeHediffDef rule in DefDatabase<CheckHediffMakeHediffDef>.AllDefsListForReading)
 		{
 			if (rule?.targetRace == null)
@@ -119,10 +151,10 @@ internal static class MihoFixState
 				continue;
 			}
 
-			if (!RulesByRace.TryGetValue(rule.targetRace, out List<CheckHediffMakeHediffDef> rules))
+			if (!rawRulesByRace.TryGetValue(rule.targetRace, out List<CheckHediffMakeHediffDef> rules))
 			{
 				rules = new List<CheckHediffMakeHediffDef>();
-				RulesByRace[rule.targetRace] = rules;
+				rawRulesByRace[rule.targetRace] = rules;
 			}
 
 			rules.Add(rule);
@@ -130,7 +162,25 @@ internal static class MihoFixState
 
 		InitializeRoleFamilies();
 
-		foreach (KeyValuePair<ThingDef, List<CheckHediffMakeHediffDef>> entry in RulesByRace)
+		foreach (KeyValuePair<ThingDef, List<CheckHediffMakeHediffDef>> entry in rawRulesByRace)
+		{
+			List<MihoRuleRuntime> runtimeRules = new List<MihoRuleRuntime>(entry.Value.Count);
+			for (int i = 0; i < entry.Value.Count; i++)
+			{
+				MihoRuleRuntime runtimeRule = CreateRuntimeRule(entry.Value[i]);
+				if (runtimeRule != null)
+				{
+					runtimeRules.Add(runtimeRule);
+				}
+			}
+
+			if (runtimeRules.Count > 0)
+			{
+				RulesByRace[entry.Key] = runtimeRules.ToArray();
+			}
+		}
+
+		foreach (KeyValuePair<ThingDef, MihoRuleRuntime[]> entry in RulesByRace)
 		{
 			List<CompProperties> comps = entry.Key.comps ?? (entry.Key.comps = new List<CompProperties>());
 			comps.RemoveAll(static comp => comp is CompProperties_CheckHediffMakeHediff);
@@ -141,9 +191,9 @@ internal static class MihoFixState
 		}
 
 		int totalRuleCount = 0;
-		foreach (List<CheckHediffMakeHediffDef> rules in RulesByRace.Values)
+		foreach (MihoRuleRuntime[] rules in RulesByRace.Values)
 		{
-			totalRuleCount += rules.Count;
+			totalRuleCount += rules.Length;
 		}
 
 		Log.Message($"[Miho Hediff Fix] Cached {totalRuleCount} hediff rules across {RulesByRace.Count} target races and {RoleFamilies.Count} role families.");
@@ -176,6 +226,17 @@ internal static class MihoFixState
 		}
 
 		return targetDef == family.StartDef;
+	}
+
+	internal static bool TryGetRulesForRace(ThingDef def, out MihoRuleRuntime[] rules)
+	{
+		if (def != null && RulesByRace.TryGetValue(def, out rules) && rules.Length > 0)
+		{
+			return true;
+		}
+
+		rules = null;
+		return false;
 	}
 
 	internal static int GetTierLevel(HediffDef def)
@@ -237,6 +298,47 @@ internal static class MihoFixState
 
 		return false;
 	}
+
+	private static MihoRuleRuntime CreateRuntimeRule(CheckHediffMakeHediffDef rule)
+	{
+		if (rule == null || string.IsNullOrEmpty(rule.defName) || rule.hediffSeverity <= 0f)
+		{
+			return null;
+		}
+
+		HediffDef[] sourceDefs = CollectHediffDefs(rule.hediffDefs);
+		HediffDef[] targetDefs = CollectHediffDefs(rule.makeHediffDefs);
+		if (sourceDefs.Length == 0 || targetDefs.Length == 0)
+		{
+			return null;
+		}
+
+		TryGetRoleFamilyForRule(rule, out MihoRoleFamily startRoleFamily);
+		return new MihoRuleRuntime(rule, sourceDefs, targetDefs, startRoleFamily);
+	}
+
+	private static HediffDef[] CollectHediffDefs(List<HediffDef> defs)
+	{
+		if (defs == null || defs.Count == 0)
+		{
+			return Array.Empty<HediffDef>();
+		}
+
+		List<HediffDef> collected = null;
+		for (int i = 0; i < defs.Count; i++)
+		{
+			HediffDef def = defs[i];
+			if (def == null)
+			{
+				continue;
+			}
+
+			collected ??= new List<HediffDef>(defs.Count);
+			collected.Add(def);
+		}
+
+		return collected == null || collected.Count == 0 ? Array.Empty<HediffDef>() : collected.ToArray();
+	}
 }
 
 public class CompProperties_MihoHediffAggregator : CompProperties
@@ -250,14 +352,18 @@ public class CompProperties_MihoHediffAggregator : CompProperties
 public class Comp_MihoHediffAggregator : ThingComp
 {
 	private Pawn pawn;
-	private Dictionary<string, int> remainingTicksByRule = new Dictionary<string, int>();
+	private int[] remainingRuleTicks = Array.Empty<int>();
 	private readonly HashSet<HediffDef> presentDefs = new HashSet<HediffDef>();
 	private readonly List<Hediff> hediffsToRemove = new List<Hediff>();
+	private Dictionary<string, int> legacyRemainingTicksByRule = new Dictionary<string, int>();
 	private List<string> savedRuleKeys;
 	private List<int> savedRuleValues;
+	private List<int> savedRemainingRuleTicks;
 	private bool[] roleHasStart;
 	private bool[] roleHasTrigger;
 	private int[] highestRoleTier;
+	private MihoRuleRuntime[] activeRules = Array.Empty<MihoRuleRuntime>();
+	private bool ruleStateReady;
 
 	public override void PostSpawnSetup(bool respawningAfterLoad)
 	{
@@ -285,10 +391,19 @@ public class Comp_MihoHediffAggregator : ThingComp
 	public override void PostExposeData()
 	{
 		base.PostExposeData();
-		Scribe_Collections.Look(ref remainingTicksByRule, "remainingTicksByRule", LookMode.Value, LookMode.Value, ref savedRuleKeys, ref savedRuleValues);
-		if (remainingTicksByRule == null)
+		if (Scribe.mode == LoadSaveMode.Saving)
 		{
-			remainingTicksByRule = new Dictionary<string, int>();
+			savedRemainingRuleTicks = remainingRuleTicks == null || remainingRuleTicks.Length == 0 ? null : new List<int>(remainingRuleTicks);
+		}
+
+		Scribe_Collections.Look(ref savedRemainingRuleTicks, "remainingRuleTicks", LookMode.Value);
+		Scribe_Collections.Look(ref legacyRemainingTicksByRule, "remainingTicksByRule", LookMode.Value, LookMode.Value, ref savedRuleKeys, ref savedRuleValues);
+		if (Scribe.mode == LoadSaveMode.PostLoadInit)
+		{
+			remainingRuleTicks = savedRemainingRuleTicks == null || savedRemainingRuleTicks.Count == 0 ? Array.Empty<int>() : savedRemainingRuleTicks.ToArray();
+			legacyRemainingTicksByRule ??= new Dictionary<string, int>();
+			ruleStateReady = false;
+			activeRules = Array.Empty<MihoRuleRuntime>();
 		}
 	}
 
@@ -313,57 +428,29 @@ public class Comp_MihoHediffAggregator : ThingComp
 
 	private void EnsureRuleState()
 	{
-		if (pawn == null || !MihoFixState.RulesByRace.TryGetValue(pawn.def, out List<CheckHediffMakeHediffDef> rules))
+		if (pawn == null || !MihoFixState.TryGetRulesForRace(pawn.def, out MihoRuleRuntime[] rules))
 		{
-			remainingTicksByRule.Clear();
+			activeRules = Array.Empty<MihoRuleRuntime>();
+			remainingRuleTicks = Array.Empty<int>();
+			legacyRemainingTicksByRule.Clear();
+			ruleStateReady = false;
 			return;
 		}
 
-		HashSet<string> validRuleNames = new HashSet<string>();
-		for (int i = 0; i < rules.Count; i++)
+		if (ReferenceEquals(activeRules, rules) && ruleStateReady && remainingRuleTicks != null && remainingRuleTicks.Length == rules.Length)
 		{
-			CheckHediffMakeHediffDef rule = rules[i];
-			if (rule == null || string.IsNullOrEmpty(rule.defName))
-			{
-				continue;
-			}
-
-			validRuleNames.Add(rule.defName);
-			if (!remainingTicksByRule.ContainsKey(rule.defName) || remainingTicksByRule[rule.defName] <= 0)
-			{
-				remainingTicksByRule[rule.defName] = Math.Max(rule.tickMultiflier, MihoFixState.AggregatorBucketTicks);
-			}
+			return;
 		}
 
-		hediffsToRemove.Clear();
-		foreach (string key in remainingTicksByRule.Keys)
-		{
-			if (!validRuleNames.Contains(key))
-			{
-				hediffsToRemove.Clear();
-				break;
-			}
-		}
-
-		List<string> staleKeys = new List<string>();
-		foreach (string key in remainingTicksByRule.Keys)
-		{
-			if (!validRuleNames.Contains(key))
-			{
-				staleKeys.Add(key);
-			}
-		}
-
-		for (int i = 0; i < staleKeys.Count; i++)
-		{
-			remainingTicksByRule.Remove(staleKeys[i]);
-		}
+		activeRules = rules;
+		InitializeRemainingRuleTicks(rules);
+		ruleStateReady = true;
 	}
 
 	private void ProcessRules()
 	{
 		EnsureRuleState();
-		if (pawn == null || !MihoFixState.RulesByRace.TryGetValue(pawn.def, out List<CheckHediffMakeHediffDef> rules))
+		if (pawn == null || activeRules == null || activeRules.Length == 0)
 		{
 			return;
 		}
@@ -371,31 +458,24 @@ public class Comp_MihoHediffAggregator : ThingComp
 		RefreshPawnState();
 		NormalizeRoleFamilies();
 
-		for (int i = 0; i < rules.Count; i++)
+		for (int i = 0; i < activeRules.Length; i++)
 		{
-			CheckHediffMakeHediffDef rule = rules[i];
-			if (rule == null || string.IsNullOrEmpty(rule.defName))
-			{
-				continue;
-			}
-
-			int resetTicks = Math.Max(rule.tickMultiflier, MihoFixState.AggregatorBucketTicks);
+			MihoRuleRuntime rule = activeRules[i];
 			if (!HasAnySourceHediff(rule))
 			{
-				remainingTicksByRule[rule.defName] = resetTicks;
+				remainingRuleTicks[i] = rule.ResetTicks;
 				continue;
 			}
 
-			int remainingTicks = remainingTicksByRule.TryGetValue(rule.defName, out int value) ? value : resetTicks;
-			remainingTicks -= MihoFixState.AggregatorBucketTicks;
+			int remainingTicks = remainingRuleTicks[i] - MihoFixState.AggregatorBucketTicks;
 			if (remainingTicks > 0)
 			{
-				remainingTicksByRule[rule.defName] = remainingTicks;
+				remainingRuleTicks[i] = remainingTicks;
 				continue;
 			}
 
 			bool changed = ApplyRule(rule);
-			remainingTicksByRule[rule.defName] = resetTicks;
+			remainingRuleTicks[i] = rule.ResetTicks;
 			if (changed)
 			{
 				RefreshPawnState();
@@ -500,17 +580,16 @@ public class Comp_MihoHediffAggregator : ThingComp
 		}
 	}
 
-	private bool HasAnySourceHediff(CheckHediffMakeHediffDef rule)
+	private bool HasAnySourceHediff(MihoRuleRuntime rule)
 	{
-		if (rule?.hediffDefs == null)
+		if (rule?.SourceDefs == null)
 		{
 			return false;
 		}
 
-		for (int i = 0; i < rule.hediffDefs.Count; i++)
+		for (int i = 0; i < rule.SourceDefs.Length; i++)
 		{
-			HediffDef hediffDef = rule.hediffDefs[i];
-			if (hediffDef != null && presentDefs.Contains(hediffDef))
+			if (presentDefs.Contains(rule.SourceDefs[i]))
 			{
 				return true;
 			}
@@ -519,28 +598,27 @@ public class Comp_MihoHediffAggregator : ThingComp
 		return false;
 	}
 
-	private bool ApplyRule(CheckHediffMakeHediffDef rule)
+	private bool ApplyRule(MihoRuleRuntime rule)
 	{
-		if (pawn?.health == null || rule?.makeHediffDefs == null || rule.hediffSeverity <= 0f)
+		if (pawn?.health == null || rule?.TargetDefs == null || rule.Severity <= 0f)
 		{
 			return false;
 		}
 
-		if (rule.defName == MihoFixState.NoJobRuleDefName)
+		if (rule.IsNoJobRule)
 		{
 			return false;
 		}
 
-		if (MihoFixState.TryGetRoleFamilyForRule(rule, out MihoRoleFamily targetFamily))
+		if (rule.StartRoleFamily != null)
 		{
-			return ApplyRoleStartRule(rule, targetFamily);
+			return ApplyRoleStartRule(rule, rule.StartRoleFamily);
 		}
 
 		bool changed = false;
-		for (int i = 0; i < rule.makeHediffDefs.Count; i++)
+		for (int i = 0; i < rule.TargetDefs.Length; i++)
 		{
-			HediffDef hediffDef = rule.makeHediffDefs[i];
-			if (ApplyRuleHediff(hediffDef, rule.hediffSeverity))
+			if (ApplyRuleHediff(rule.TargetDefs[i], rule.Severity))
 			{
 				changed = true;
 			}
@@ -549,7 +627,7 @@ public class Comp_MihoHediffAggregator : ThingComp
 		return changed;
 	}
 
-	private bool ApplyRoleStartRule(CheckHediffMakeHediffDef rule, MihoRoleFamily targetFamily)
+	private bool ApplyRoleStartRule(MihoRuleRuntime rule, MihoRoleFamily targetFamily)
 	{
 		if (targetFamily?.StartDef == null)
 		{
@@ -566,13 +644,44 @@ public class Comp_MihoHediffAggregator : ThingComp
 			return false;
 		}
 
-		bool changed = ApplyRuleHediff(targetFamily.StartDef, rule.hediffSeverity);
+		bool changed = ApplyRuleHediff(targetFamily.StartDef, rule.Severity);
 		if (changed && MihoFixState.NoJobHediffDef != null && presentDefs.Contains(MihoFixState.NoJobHediffDef))
 		{
 			RemoveAllHediffsOfDef(MihoFixState.NoJobHediffDef);
 		}
 
 		return changed;
+	}
+
+	private void InitializeRemainingRuleTicks(MihoRuleRuntime[] rules)
+	{
+		int[] previousTicks = remainingRuleTicks;
+		if (previousTicks == null || previousTicks.Length != rules.Length)
+		{
+			remainingRuleTicks = new int[rules.Length];
+			if (previousTicks != null && previousTicks.Length > 0)
+			{
+				Array.Copy(previousTicks, remainingRuleTicks, Math.Min(previousTicks.Length, rules.Length));
+			}
+		}
+
+		for (int i = 0; i < rules.Length; i++)
+		{
+			if (remainingRuleTicks[i] > 0)
+			{
+				continue;
+			}
+
+			if (legacyRemainingTicksByRule.TryGetValue(rules[i].DefName, out int legacyTicks) && legacyTicks > 0)
+			{
+				remainingRuleTicks[i] = legacyTicks;
+				continue;
+			}
+
+			remainingRuleTicks[i] = rules[i].ResetTicks;
+		}
+
+		legacyRemainingTicksByRule.Clear();
 	}
 
 	private bool ApplyRuleHediff(HediffDef hediffDef, float severity)
