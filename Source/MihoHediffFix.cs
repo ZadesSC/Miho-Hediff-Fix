@@ -219,11 +219,6 @@ public class Comp_MihoHediffAggregator : ThingComp
 			return;
 		}
 
-		if (rule.defName == MihoFixState.NoJobRuleDefName && HasAnyTargetHediff(rule))
-		{
-			return;
-		}
-
 		for (int i = 0; i < rule.makeHediffDefs.Count; i++)
 		{
 			HediffDef hediffDef = rule.makeHediffDefs[i];
@@ -234,25 +229,6 @@ public class Comp_MihoHediffAggregator : ThingComp
 
 			HealthUtility.AdjustSeverity(pawn, hediffDef, rule.hediffSeverity);
 		}
-	}
-
-	private bool HasAnyTargetHediff(CheckHediffMakeHediffDef rule)
-	{
-		if (pawn?.health == null || rule?.makeHediffDefs == null)
-		{
-			return false;
-		}
-
-		for (int i = 0; i < rule.makeHediffDefs.Count; i++)
-		{
-			HediffDef hediffDef = rule.makeHediffDefs[i];
-			if (hediffDef != null && pawn.health.hediffSet.HasHediff(hediffDef, false))
-			{
-				return true;
-			}
-		}
-
-		return false;
 	}
 }
 
