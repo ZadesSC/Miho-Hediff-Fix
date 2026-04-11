@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>Miho Hediff Fix</name>
+  <author>Zades + Codex</author>
+  <packageId>zades.mihohedifffix</packageId>
+  <supportedVersions>
+    <li>1.6</li>
+  </supportedVersions>
+  <modVersion>0.1.0</modVersion>
+  <modDependencies>
+    <li>
+      <packageId>brrainz.harmony</packageId>
+      <displayName>Harmony</displayName>
+    </li>
+    <li>
+      <packageId>miho.fortifiedoutremer</packageId>
+      <displayName>Miho, the celestial fox</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/2816826107</steamWorkshopUrl>
+    </li>
+  </modDependencies>
+  <loadAfter>
+    <li>miho.fortifiedoutremer</li>
+  </loadAfter>
+  <description>Replaces Miho's many per-rule ticking hediff comps with a single pawn-level aggregator, suppresses the original hot path, and maintains Miho apparel marker hediffs through event-driven updates.</description>
+</ModMetaData>
