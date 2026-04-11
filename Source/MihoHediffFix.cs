@@ -42,14 +42,10 @@ internal static class MihoFixState
 	internal const int AggregatorBucketTicks = 60;
 
 	internal static readonly Dictionary<ThingDef, List<CheckHediffMakeHediffDef>> RulesByRace = new Dictionary<ThingDef, List<CheckHediffMakeHediffDef>>();
-	internal static readonly HashSet<ThingDef> OptimizedApparelDefs = new HashSet<ThingDef>();
-	internal static readonly HashSet<HediffDef> OptimizedApparelHediffs = new HashSet<HediffDef>();
 
 	internal static void Initialize()
 	{
 		RulesByRace.Clear();
-		OptimizedApparelDefs.Clear();
-		OptimizedApparelHediffs.Clear();
 
 		foreach (CheckHediffMakeHediffDef rule in DefDatabase<CheckHediffMakeHediffDef>.AllDefsListForReading)
 		{
@@ -72,150 +68,15 @@ internal static class MihoFixState
 			List<CompProperties> comps = entry.Key.comps ?? (entry.Key.comps = new List<CompProperties>());
 			comps.RemoveAll(static comp => comp is CompProperties_CheckHediffMakeHediff);
 
-			if (!comps.Any(static comp => comp is CompProperties_MihoHediffAggregator))
-			{
-				comps.Add(new CompProperties_MihoHediffAggregator());
-			}
-		}
-
-		foreach (ThingDef thingDef in DefDatabase<ThingDef>.AllDefsListForReading)
-		{
-			if (!IsMihoDef(thingDef) || thingDef.comps == null)
-			{
-				continue;
-			}
-
-			foreach (CompProperties_CauseHediff_Apparel comp in thingDef.comps.OfType<CompProperties_CauseHediff_Apparel>())
-			{
-				OptimizedApparelDefs.Add(thingDef);
-				if (comp.hediff != null)
+				if (!comps.Any(static comp => comp is CompProperties_MihoHediffAggregator))
 				{
-					OptimizedApparelHediffs.Add(comp.hediff);
+					comps.Add(new CompProperties_MihoHediffAggregator());
 				}
 			}
-		}
-
-		Log.Message($"[Miho Hediff Fix] Cached {RulesByRace.Values.Sum(static x => x.Count)} hediff rules across {RulesByRace.Count} target races and {OptimizedApparelDefs.Count} Miho apparel defs.");
-	}
-
-	internal static bool IsMihoDef(Def def)
-	{
-		ModContentPack pack = def?.modContentPack;
-		return string.Equals(pack?.PackageId, MihoPackageId, StringComparison.OrdinalIgnoreCase)
-			|| string.Equals(pack?.PackageIdPlayerFacing, MihoPackageId, StringComparison.OrdinalIgnoreCase);
-	}
-
-	internal static bool IsOptimizedApparel(ThingDef thingDef)
-	{
-		return thingDef != null && OptimizedApparelDefs.Contains(thingDef);
-	}
-
-	internal static CompProperties_CauseHediff_Apparel GetOptimizedApparelComp(Apparel apparel)
-	{
-		if (apparel?.def?.comps == null || !IsOptimizedApparel(apparel.def))
-		{
-			return null;
-		}
-
-		return apparel.def.comps.OfType<CompProperties_CauseHediff_Apparel>().FirstOrDefault();
-	}
-
-	internal static void ApplyApparelHediff(Pawn pawn, Apparel apparel)
-	{
-		CompProperties_CauseHediff_Apparel props = GetOptimizedApparelComp(apparel);
-		if (pawn?.health == null || props?.hediff == null || pawn.health.hediffSet.HasHediff(props.hediff, false))
-		{
-			return;
-		}
-
-		BodyPartRecord bodyPart = null;
-		if (props.part != null)
-		{
-			bodyPart = pawn.RaceProps?.body?.GetPartsWithDef(props.part).FirstOrDefault();
-		}
-
-		pawn.health.AddHediff(props.hediff, bodyPart);
-	}
-
-	internal static void RemoveApparelHediffIfUnsupported(Pawn pawn, Apparel apparel)
-	{
-		CompProperties_CauseHediff_Apparel props = GetOptimizedApparelComp(apparel);
-		if (pawn?.health == null || props?.hediff == null)
-		{
-			return;
-		}
-
-		if (IsHediffStillSupportedByWornApparel(pawn, props.hediff))
-		{
-			return;
-		}
-
-		RemoveAllHediffsOfDef(pawn, props.hediff);
-	}
-
-	internal static bool IsHediffStillSupportedByWornApparel(Pawn pawn, HediffDef hediffDef)
-	{
-		if (pawn?.apparel?.WornApparel == null || hediffDef == null)
-		{
-			return false;
-		}
-
-		for (int i = 0; i < pawn.apparel.WornApparel.Count; i++)
-		{
-			CompProperties_CauseHediff_Apparel props = GetOptimizedApparelComp(pawn.apparel.WornApparel[i]);
-			if (props?.hediff == hediffDef)
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	internal static void SyncApparelHediffs(Pawn pawn)
-	{
-		if (pawn?.health == null)
-		{
-			return;
-		}
-
-		if (pawn.apparel?.WornApparel != null)
-		{
-			for (int i = 0; i < pawn.apparel.WornApparel.Count; i++)
-			{
-				ApplyApparelHediff(pawn, pawn.apparel.WornApparel[i]);
-			}
-		}
-
-		foreach (HediffDef hediffDef in OptimizedApparelHediffs)
-		{
-			if (!pawn.health.hediffSet.HasHediff(hediffDef, false))
-			{
-				continue;
-			}
-
-			if (!IsHediffStillSupportedByWornApparel(pawn, hediffDef))
-			{
-				RemoveAllHediffsOfDef(pawn, hediffDef);
-			}
+	
+		Log.Message($"[Miho Hediff Fix] Cached {RulesByRace.Values.Sum(static x => x.Count)} hediff rules across {RulesByRace.Count} target races.");
 		}
 	}
-
-	internal static void RemoveAllHediffsOfDef(Pawn pawn, HediffDef hediffDef)
-	{
-		if (pawn?.health == null || hediffDef == null)
-		{
-			return;
-		}
-
-		Hediff hediff = pawn.health.hediffSet.GetFirstHediffOfDef(hediffDef, false);
-		while (hediff != null)
-		{
-			pawn.health.RemoveHediff(hediff);
-			hediff = pawn.health.hediffSet.GetFirstHediffOfDef(hediffDef, false);
-		}
-	}
-}
 
 public class CompProperties_MihoHediffAggregator : CompProperties
 {
@@ -237,7 +98,6 @@ public class Comp_MihoHediffAggregator : ThingComp
 		base.PostSpawnSetup(respawningAfterLoad);
 		pawn = parent as Pawn;
 		EnsureRuleState();
-		MihoFixState.SyncApparelHediffs(pawn);
 	}
 
 	public override void CompTick()
@@ -407,55 +267,6 @@ public static class Patch_ThingComp_CheckHediffMakeHediff_CompTick
 			return false;
 		}
 
-		return true;
-	}
-}
-
-[HarmonyPatch(typeof(CompCauseHediff_Apparel), nameof(CompCauseHediff_Apparel.CompTick))]
-public static class Patch_CompCauseHediff_Apparel_CompTick
-{
-	public static bool Prefix(CompCauseHediff_Apparel __instance)
-	{
-		Apparel apparel = __instance.parent as Apparel;
-		if (apparel != null && MihoFixState.IsOptimizedApparel(apparel.def))
-		{
-			return false;
-		}
-
-		return true;
-	}
-}
-
-[HarmonyPatch(typeof(Pawn_ApparelTracker), nameof(Pawn_ApparelTracker.Notify_ApparelAdded))]
-public static class Patch_Pawn_ApparelTracker_Notify_ApparelAdded
-{
-	public static void Postfix(Pawn_ApparelTracker __instance, Apparel apparel)
-	{
-		if (__instance?.pawn == null || apparel == null)
-		{
-			return;
-		}
-
-		if (MihoFixState.IsOptimizedApparel(apparel.def))
-		{
-			MihoFixState.ApplyApparelHediff(__instance.pawn, apparel);
-		}
-	}
-}
-
-[HarmonyPatch(typeof(Pawn_ApparelTracker), nameof(Pawn_ApparelTracker.Notify_ApparelRemoved))]
-public static class Patch_Pawn_ApparelTracker_Notify_ApparelRemoved
-{
-	public static void Postfix(Pawn_ApparelTracker __instance, Apparel apparel)
-	{
-		if (__instance?.pawn == null || apparel == null)
-		{
-			return;
-		}
-
-		if (MihoFixState.IsOptimizedApparel(apparel.def))
-		{
-			MihoFixState.RemoveApparelHediffIfUnsupported(__instance.pawn, apparel);
-		}
+	return true;
 	}
 }

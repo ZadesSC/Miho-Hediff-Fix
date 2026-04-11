@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
   <name>Miho Hediff Fix</name>
-  <author>Zades + Codex</author>
+  <author>Zades</author>
   <packageId>zades.mihohedifffix</packageId>
   <supportedVersions>
     <li>1.6</li>
@@ -21,5 +21,5 @@
   <loadAfter>
     <li>miho.fortifiedoutremer</li>
   </loadAfter>
-  <description>Replaces Miho's many per-rule ticking hediff comps with a single pawn-level aggregator, suppresses the original hot path, and maintains Miho apparel marker hediffs through event-driven updates.</description>
+  <description>Fixes the issue with Miho's hediff patch, where the mod adds 10 ticking comps on each Miho pawn. Each comp ticks every tick and iterates through the entire list of hediffs to check its specific hediff. Yes all 10 comps all iterate the entire hediff list every tick. On every pawn. Amazing!</description>
 </ModMetaData>
