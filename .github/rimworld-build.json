@@ -3,12 +3,13 @@
   "slug": "MihoHediffFix",
   "defaultBranch": "main",
   "supportedVersions": [
-    "1.6"
+    "1.6",
+    "1.7"
   ],
   "assemblyMode": "committed",
   "needsDotnet": false,
   "assemblies": [
-    "1.6/Assemblies/MihoHediffFix.dll"
+    "Assemblies/MihoHediffFix.dll"
   ],
   "sourceGlobs": [
     "Source/**/*.cs",
@@ -16,7 +17,8 @@
   ],
   "include": [
     "About",
-    "1.6",
+    "Assemblies",
+    "LoadFolders.xml",
     "LICENSE"
   ],
   "dependencyNotes": [

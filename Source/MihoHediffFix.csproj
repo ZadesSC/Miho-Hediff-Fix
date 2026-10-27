@@ -7,40 +7,37 @@
     <Nullable>disable</Nullable>
     <AssemblyName>MihoHediffFix</AssemblyName>
     <RootNamespace>Zades.MihoHediffFix</RootNamespace>
-    <OutputPath>..\1.6\Assemblies\</OutputPath>
+    <OutputPath>../Assemblies/</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
 
+  <Target Name="ValidateModReferences" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(RimWorldManagedDir)/Assembly-CSharp.dll')" Text="Set RimWorldManagedDir to RimWorld 1.6's Managed directory." />
+    <Error Condition="!Exists('$(HarmonyAssembly)')" Text="Set HarmonyAssembly to Harmony's 0Harmony.dll." />
+    <Error Condition="!Exists('$(MihoAssembly)')" Text="Set MihoAssembly to Miho's CheckHediffMakeHediff.dll." />
+  </Target>
+
   <ItemGroup>
     <Reference Include="Assembly-CSharp">
-      <HintPath Condition="Exists('/mnt/g/Games/Steam/steamapps/common/RimWorld/RimWorldWin64_Data/Managed/Assembly-CSharp.dll')">/mnt/g/Games/Steam/steamapps/common/RimWorld/RimWorldWin64_Data/Managed/Assembly-CSharp.dll</HintPath>
-      <HintPath Condition="Exists('G:\\Games\\Steam\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed\\Assembly-CSharp.dll')">G:\Games\Steam\steamapps\common\RimWorld\RimWorldWin64_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <HintPath>$(RimWorldManagedDir)/Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine">
-      <HintPath Condition="Exists('/mnt/g/Games/Steam/steamapps/common/RimWorld/RimWorldWin64_Data/Managed/UnityEngine.dll')">/mnt/g/Games/Steam/steamapps/common/RimWorld/RimWorldWin64_Data/Managed/UnityEngine.dll</HintPath>
-      <HintPath Condition="Exists('G:\\Games\\Steam\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed\\UnityEngine.dll')">G:\Games\Steam\steamapps\common\RimWorld\RimWorldWin64_Data\Managed\UnityEngine.dll</HintPath>
+      <HintPath>$(RimWorldManagedDir)/UnityEngine.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.CoreModule">
-      <HintPath Condition="Exists('/mnt/g/Games/Steam/steamapps/common/RimWorld/RimWorldWin64_Data/Managed/UnityEngine.CoreModule.dll')">/mnt/g/Games/Steam/steamapps/common/RimWorld/RimWorldWin64_Data/Managed/UnityEngine.CoreModule.dll</HintPath>
-      <HintPath Condition="Exists('G:\\Games\\Steam\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed\\UnityEngine.CoreModule.dll')">G:\Games\Steam\steamapps\common\RimWorld\RimWorldWin64_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+      <HintPath>$(RimWorldManagedDir)/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="0Harmony">
-      <HintPath Condition="Exists('/mnt/g/Games/Steam/steamapps/workshop/content/294100/2009463077/Current/Assemblies/0Harmony.dll')">/mnt/g/Games/Steam/steamapps/workshop/content/294100/2009463077/Current/Assemblies/0Harmony.dll</HintPath>
-      <HintPath Condition="Exists('/mnt/g/Games/Steam/steamapps/workshop/content/294100/2009463077/1.6/Assemblies/0Harmony.dll')">/mnt/g/Games/Steam/steamapps/workshop/content/294100/2009463077/1.6/Assemblies/0Harmony.dll</HintPath>
-      <HintPath Condition="Exists('/mnt/g/Games/Steam/steamapps/workshop/content/294100/3703738952/1.6/Assemblies/0Harmony.dll')">/mnt/g/Games/Steam/steamapps/workshop/content/294100/3703738952/1.6/Assemblies/0Harmony.dll</HintPath>
-      <HintPath Condition="Exists('G:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\2009463077\\Current\\Assemblies\\0Harmony.dll')">G:\Games\Steam\steamapps\workshop\content\294100\2009463077\Current\Assemblies\0Harmony.dll</HintPath>
-      <HintPath Condition="Exists('G:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\2009463077\\1.6\\Assemblies\\0Harmony.dll')">G:\Games\Steam\steamapps\workshop\content\294100\2009463077\1.6\Assemblies\0Harmony.dll</HintPath>
-      <HintPath Condition="Exists('G:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\3703738952\\1.6\\Assemblies\\0Harmony.dll')">G:\Games\Steam\steamapps\workshop\content\294100\3703738952\1.6\Assemblies\0Harmony.dll</HintPath>
+      <HintPath>$(HarmonyAssembly)</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="CheckHediffMakeHediff">
-      <HintPath Condition="Exists('/mnt/g/Games/Steam/steamapps/workshop/content/294100/2816826107/1.6/Assemblies/CheckHediffMakeHediff.dll')">/mnt/g/Games/Steam/steamapps/workshop/content/294100/2816826107/1.6/Assemblies/CheckHediffMakeHediff.dll</HintPath>
-      <HintPath Condition="Exists('G:\\Games\\Steam\\steamapps\\workshop\\content\\294100\\2816826107\\1.6\\Assemblies\\CheckHediffMakeHediff.dll')">G:\Games\Steam\steamapps\workshop\content\294100\2816826107\1.6\Assemblies\CheckHediffMakeHediff.dll</HintPath>
+      <HintPath>$(MihoAssembly)</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
