@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "slug": "MihoHediffFix",
+  "defaultBranch": "main",
+  "supportedVersions": [
+    "1.6"
+  ],
+  "assemblyMode": "committed",
+  "needsDotnet": false,
+  "assemblies": [
+    "1.6/Assemblies/MihoHediffFix.dll"
+  ],
+  "sourceGlobs": [
+    "Source/**/*.cs",
+    "Source/**/*.csproj"
+  ],
+  "include": [
+    "About",
+    "1.6",
+    "LICENSE"
+  ],
+  "dependencyNotes": [
+    "Harmony (brrainz.harmony); required separately, not bundled.",
+    "Miho, the celestial fox (miho.fortifiedoutremer) and its dependencies; required separately, not bundled."
+  ]
+}

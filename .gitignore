@@ -1,3 +1,9 @@
 Source/bin/
 Source/obj/
 .vs/
+
+/dist/
+/.rimworld-ci/
+/release-notes.txt
+__pycache__/
+*.pyc

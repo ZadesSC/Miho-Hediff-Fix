@@ -1,0 +1,22 @@
+name: Build dev package
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ZadesSC/HighDensityHydroponics/.github/workflows/rimworld-ci.yml@25c60977b5dbd240e3624ea963e734699139cb43
+    with:
+      channel: dev
+      tooling-ref: 25c60977b5dbd240e3624ea963e734699139cb43

@@ -1,0 +1,33 @@
+name: Create release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional vYYYY.MM.DD[.N][-beta.N]; blank allocates the next date version in Los Angeles'
+        type: string
+        required: false
+      channel:
+        description: 'Stable releases require the default branch; prereleases may also use dev'
+        type: choice
+        options: [stable, prerelease]
+        default: stable
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: create-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: ZadesSC/HighDensityHydroponics/.github/workflows/rimworld-release.yml@25c60977b5dbd240e3624ea963e734699139cb43
+    with:
+      channel: ${{ github.event_name == 'push' && (contains(github.ref_name, '-') && 'prerelease' || 'stable') || inputs.channel }}
+      version: ${{ inputs.version || '' }}
+      tooling-ref: 25c60977b5dbd240e3624ea963e734699139cb43
