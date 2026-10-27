@@ -53,6 +53,63 @@ public class ProbeGame : GameComponent
             Check(!race.comps.Any(c=>c is CompProperties_CheckHediffMakeHediff || c.compClass?.FullName=="MihoOptimization.Comp_MihoHediffAggregator"),"original_comps_removed_"+race.defName);
         }
     }
+    void ClassSafeguards(Comp_MihoHediffAggregator comp, List<CheckHediffMakeHediffDef> rules) {
+        var classNames=new[]{"Huntress","Shamaness","Summoner","Temptress","Tinker","Celestial"};
+        void ClearClassState() {
+            foreach(var h in pawn.health.hediffSet.hediffs.Where(h=>classNames.Any(n=>h.def.defName.StartsWith("Miho_"+n+"_")) || h.def.defName=="Miho_Nojob" || h.def.defName.StartsWith("Miho_PositiveFlower_Child")).ToList())pawn.health.RemoveHediff(h);
+        }
+        void Due(string suffix) {
+            Array.Fill(Ticks(comp),60000000);
+            Ticks(comp)[rules.FindIndex(r=>r.defName=="Miho_CheckHediffMakeHediff_"+suffix)]=60;
+        }
+        Hediff Add(string name,float severity=1f) {var h=pawn.health.AddHediff(HediffDef.Named(name));h.Severity=severity;return h;}
+        Hediff Get(string name)=>pawn.health.hediffSet.GetFirstHediffOfDef(HediffDef.Named(name));
+        ClearClassState();
+        Add("Miho_PositiveFlower_ChildHuntress_High");
+        Add("Miho_PositiveFlower_ChildShamaness_High");
+        Due("Huntress");Ticks(comp)[rules.FindIndex(r=>r.defName=="Miho_CheckHediffMakeHediff_Shamaness")]=60;
+        Process(comp);
+        Check(Get("Miho_Huntress_Start_Hediff")?.Severity==1f && Get("Miho_Shamaness_Start_Hediff")==null,"simultaneous_pills_start_one_class");
+        var starter=Get("Miho_Huntress_Start_Hediff");starter.Severity=0.6f;Due("Huntress");Process(comp);
+        Check(Math.Abs(starter.Severity-0.6f)<0.0001f,"class_starter_not_topped_up");
+        starter.Severity=1.5f;Due("Huntress");Process(comp);
+        Check(starter.Severity==1f,"overfilled_starter_repaired");
+        // Exercise all ranks and all six families, including duplicate starter defs on different parts.
+        ClearClassState();
+        Add("Miho_Celestial_V_Hediff");Add("Miho_Nojob");
+        foreach(string family in classNames)Add("Miho_"+family+"_Start_Hediff");
+        pawn.health.AddHediff(HediffDef.Named("Miho_Huntress_Start_Hediff"),pawn.RaceProps.body.corePart);
+        Due("Huntress");Process(comp);
+        Check(!pawn.health.hediffSet.hediffs.Any(h=>h.def.defName=="Miho_Nojob"||classNames.Any(n=>h.def.defName=="Miho_"+n+"_Start_Hediff")),"established_class_cleans_all_starters_and_nojob");
+        Check(Get("Miho_Celestial_V_Hediff")!=null,"cleanup_preserves_established_class");
+        foreach(string suffix in new[]{"Tea","Pipe","Restraint"}) {
+            var rule=rules.Single(r=>r.defName=="Miho_CheckHediffMakeHediff_"+suffix);
+            foreach(var src in rule.hediffDefs)if(pawn.health.hediffSet.GetFirstHediffOfDef(src)==null)pawn.health.AddHediff(src);
+            var output=pawn.health.hediffSet.GetFirstHediffOfDef(rule.makeHediffDefs[0])??pawn.health.AddHediff(rule.makeHediffDefs[0]);
+            output.Severity=0.2f;Due(suffix);Process(comp);
+            Check(Math.Abs(output.Severity-0.2f-rule.hediffSeverity)<0.0001f,"utility_rule_with_established_class_"+suffix);
+        }
+        ClearClassState();Add("Miho_Huntress_Start_Hediff",0.6f);
+        var tea=rules.Single(r=>r.defName=="Miho_CheckHediffMakeHediff_Tea");
+        var teaOutput=Get(tea.makeHediffDefs[0].defName);teaOutput.Severity=0.2f;Due("Tea");Process(comp);
+        Check(Math.Abs(teaOutput.Severity-0.3f)<0.0001f,"tea_runs_during_class_unlock");
+        ClearClassState();
+        // The separate Abomi rule must retain additive severity behavior.
+        var abomiKind=DefDatabase<PawnKindDef>.AllDefsListForReading.First(k=>k.race.defName=="Miho_Abomi");
+        var abomi=PawnGenerator.GeneratePawn(new PawnGenerationRequest(abomiKind,forceGenerateNewPawn:true,forceNoIdeo:true));
+        GenSpawn.Spawn(abomi,Find.CurrentMap.Center+new IntVec3(12,0,0),Find.CurrentMap);
+        var abomiComp=abomi.TryGetComp<Comp_MihoHediffAggregator>();
+        var abomiRule=DefDatabase<CheckHediffMakeHediffDef>.AllDefsListForReading.Single(r=>r.targetRace==abomi.def);
+        abomi.health.AddHediff(abomiRule.hediffDefs[0]);
+        var buff=abomi.health.hediffSet.GetFirstHediffOfDef(abomiRule.makeHediffDefs[0])??abomi.health.AddHediff(abomiRule.makeHediffDefs[0]);buff.Severity=0.25f;
+        Ticks(abomiComp)[0]=60;Process(abomiComp);
+        float expected=Math.Min(abomiRule.makeHediffDefs[0].maxSeverity,0.25f+abomiRule.hediffSeverity);
+        Check(Math.Abs(buff.Severity-expected)<0.0001f,"abomi_rule_remains_additive",new {actual=buff.Severity,expected});
+        // The generated upstream Abomi weapon graph has its own save/load issue;
+        // discard this transient rule fixture before the separate persistence test.
+        abomi.Destroy(DestroyMode.Vanish);
+        Find.WorldPawns.RemovePawn(abomi);
+    }
     void Prepare() {
         var kind=PawnKindDef.Named("Miho_PlayerColonistNonMagic");
         pawn=PawnGenerator.GeneratePawn(new PawnGenerationRequest(kind,Faction.OfPlayer,forceGenerateNewPawn:true,forceNoIdeo:true));
@@ -87,6 +144,7 @@ public class ProbeGame : GameComponent
         Check(Math.Abs(Before()-before)<0.0001f,"legacy_comp_tick_suppressed");
         ProbeMod.Write(new {type="comp_diagnostic", comps=pawn.AllComps.Select(c=>new {name=c.GetType().FullName, ticks=c is Comp_MihoHediffAggregator ? Ticks(c) : null}).ToArray(), defComps=pawn.def.comps.Select(c=>c.compClass.FullName).ToArray()});
         Check(pawn.AllComps.Count(c=>c.GetType().Name=="Comp_MihoHediffAggregator")==1,"single_aggregator_before_save");
+        ClassSafeguards(comp,rules);
         Ticks(comp)[index]=1777;expectedTicks=Ticks(comp).ToList();
         GameDataSaveLoader.SaveGame("MihoProbe");
         Check(File.Exists(Path.Combine(GenFilePaths.SaveDataFolderPath,"Saves/MihoProbe.rws")),"save_created");

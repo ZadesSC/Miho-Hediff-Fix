@@ -30,3 +30,13 @@ and persisted rule timers after a fresh-process reload.
 JSONL assertions, summary JSON, manifests, saves, and full logs stay outside the
 repository and runtime package. Startup mod-discovery warnings can include other
 inactive Workshop mods; the probe records game errors from its constructor onward.
+
+The guarded build adds checks for two simultaneous class pills, avoiding starter
+reinforcement, repairing legacy severity, rank-V recognition, cleanup of all six
+families and duplicate starter defs, tea/pipe/restraint with an established class,
+tea during unlocking, and unchanged additive Abomi severity. The temporary Abomi
+is discarded from the map and WorldPawns before saving because its upstream
+weapon graph has a separate serialization issue. These are rule checks, not an
+Abomi persistence claim. The full suite has 28 prepare and 11 reload assertions
+per game version. `Tests/Lifecycle` separately exercises natural class acquisition
+and performance without forced-due timers.

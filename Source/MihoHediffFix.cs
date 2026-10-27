@@ -36,49 +36,38 @@ public static class MihoHediffFixBootstrap
 	}
 }
 
-internal sealed class MihoRaceRuntime
-{
-	private readonly Dictionary<HediffDef, int> sourceIndexesByDef = new Dictionary<HediffDef, int>();
-
-	internal List<CheckHediffMakeHediffDef> Rules { get; } = new List<CheckHediffMakeHediffDef>();
-
-	internal int RelevantSourceCount => sourceIndexesByDef.Count;
-
-	internal void AddRule(CheckHediffMakeHediffDef rule)
-	{
-		Rules.Add(rule);
-		if (rule?.hediffDefs == null)
-		{
-			return;
-		}
-
-		for (int i = 0; i < rule.hediffDefs.Count; i++)
-		{
-			HediffDef sourceDef = rule.hediffDefs[i];
-			if (sourceDef != null && !sourceIndexesByDef.ContainsKey(sourceDef))
-			{
-				sourceIndexesByDef[sourceDef] = sourceIndexesByDef.Count;
-			}
-		}
-	}
-
-	internal bool TryGetSourceIndex(HediffDef def, out int index)
-	{
-		if (def != null && sourceIndexesByDef.TryGetValue(def, out index))
-		{
-			return true;
-		}
-
-		index = -1;
-		return false;
-	}
-}
-
 internal static class MihoFixState
 {
 	internal const string MihoPackageId = "miho.fortifiedoutremer";
 	internal const string NoJobRuleDefName = "Miho_CheckHediffMakeHediff_Nojob";
 	internal const int AggregatorBucketTicks = 60;
+	internal const int ClassFamilyCount = 6;
+	internal static readonly Dictionary<HediffDef, MihoTrackedHediff> ClassDefinitions = new Dictionary<HediffDef, MihoTrackedHediff>();
+
+	private static void CacheClassDefinitions()
+	{
+		ClassDefinitions.Clear();
+		string[] families = { "Huntress", "Shamaness", "Summoner", "Temptress", "Tinker", "Celestial" };
+		string[] levels = { "I", "II", "III", "IV", "V" };
+		for (int i = 0; i < families.Length; i++)
+		{
+			RegisterClassDef("Miho_" + families[i] + "_Start_Hediff", MihoClassHediffKind.Starter, i);
+			foreach (string level in levels)
+			{
+				RegisterClassDef("Miho_" + families[i] + "_" + level + "_Hediff", MihoClassHediffKind.Established);
+			}
+		}
+		RegisterClassDef("Miho_Nojob", MihoClassHediffKind.NoJob);
+	}
+
+	private static void RegisterClassDef(string name, MihoClassHediffKind kind, int starterIndex = -1)
+	{
+		HediffDef def = DefDatabase<HediffDef>.GetNamedSilentFail(name);
+		if (def != null)
+		{
+			ClassDefinitions[def] = new MihoTrackedHediff(-1, kind, starterIndex);
+		}
+	}
 
 	internal static readonly Dictionary<ThingDef, MihoRaceRuntime> RulesByRace = new Dictionary<ThingDef, MihoRaceRuntime>();
 
@@ -94,6 +83,7 @@ internal static class MihoFixState
 		}
 
 		RulesByRace.Clear();
+		CacheClassDefinitions();
 
 		foreach (CheckHediffMakeHediffDef rule in DefDatabase<CheckHediffMakeHediffDef>.AllDefsListForReading)
 		{
@@ -113,6 +103,7 @@ internal static class MihoFixState
 
 		foreach (KeyValuePair<ThingDef, MihoRaceRuntime> entry in RulesByRace)
 		{
+			entry.Value.RegisterClassDefinitions();
 			List<CompProperties> comps = entry.Key.comps ?? (entry.Key.comps = new List<CompProperties>());
 			comps.RemoveAll(static comp => comp is CompProperties_CheckHediffMakeHediff
 				|| comp.compClass?.FullName == "MihoOptimization.Comp_MihoHediffAggregator");
@@ -145,6 +136,10 @@ public class Comp_MihoHediffAggregator : ThingComp
 	private bool[] presentSourceDefs = Array.Empty<bool>();
 	private MihoRaceRuntime activeRaceRuntime;
 	private bool ruleStateReady;
+	private bool hasClass;
+	private bool hasStarter;
+	private Hediff[] classStarters = Array.Empty<Hediff>();
+	private List<Hediff> classCleanup;
 
 	public override void PostSpawnSetup(bool respawningAfterLoad)
 	{
@@ -219,16 +214,16 @@ public class Comp_MihoHediffAggregator : ThingComp
 		}
 
 		RefreshPawnState();
-		List<CheckHediffMakeHediffDef> rules = activeRaceRuntime.Rules;
+		List<MihoRuleRuntime> rules = activeRaceRuntime.Rules;
 		for (int i = 0; i < rules.Count; i++)
 		{
-			CheckHediffMakeHediffDef rule = rules[i];
-			if (rule == null || string.IsNullOrEmpty(rule.defName))
+			MihoRuleRuntime rule = rules[i];
+			if (string.IsNullOrEmpty(rule.Def.defName) || (rule.IsClassRule && hasClass))
 			{
 				continue;
 			}
 
-			int resetTicks = Math.Max(rule.tickMultiflier, MihoFixState.AggregatorBucketTicks);
+			int resetTicks = rule.ResetTicks;
 			if (!HasAnySourceHediff(rule))
 			{
 				remainingRuleTicks[i] = resetTicks;
@@ -249,45 +244,82 @@ public class Comp_MihoHediffAggregator : ThingComp
 
 	private void RefreshPawnState()
 	{
-		EnsureSourceBuffer();
 		Array.Clear(presentSourceDefs, 0, presentSourceDefs.Length);
-		if (pawn?.health?.hediffSet?.hediffs == null || activeRaceRuntime == null)
-		{
-			return;
-		}
-
+		Array.Clear(classStarters, 0, classStarters.Length);
+		classCleanup?.Clear();
+		hasClass = false;
+		hasStarter = false;
 		List<Hediff> hediffs = pawn.health.hediffSet.hediffs;
 		for (int i = 0; i < hediffs.Count; i++)
 		{
-			HediffDef def = hediffs[i]?.def;
-			if (activeRaceRuntime.TryGetSourceIndex(def, out int sourceIndex))
+			Hediff hediff = hediffs[i];
+			if (!activeRaceRuntime.TryGetTrackedHediff(hediff?.def, out MihoTrackedHediff tracked))
 			{
-				presentSourceDefs[sourceIndex] = true;
+				continue;
 			}
+			if (tracked.SourceIndex >= 0)
+			{
+				presentSourceDefs[tracked.SourceIndex] = true;
+			}
+			switch (tracked.Kind)
+			{
+				case MihoClassHediffKind.Established:
+					hasClass = true;
+					break;
+				case MihoClassHediffKind.Starter:
+					hasStarter = true;
+					classStarters[tracked.StarterIndex] = hediff;
+					QueueClassCleanup(hediff);
+					break;
+				case MihoClassHediffKind.NoJob:
+					QueueClassCleanup(hediff);
+					break;
+			}
+		}
+
+		if (hasClass && classCleanup != null && classCleanup.Count != 0)
+		{
+			for (int i = 0; i < classCleanup.Count; i++)
+			{
+				Hediff hediff = classCleanup[i];
+				pawn.health.RemoveHediff(hediff);
+				if (activeRaceRuntime.TryGetTrackedHediff(hediff.def, out MihoTrackedHediff tracked) && tracked.SourceIndex >= 0)
+				{
+					presentSourceDefs[tracked.SourceIndex] = false;
+				}
+			}
+			classCleanup.Clear();
+			Array.Clear(classStarters, 0, classStarters.Length);
+			hasStarter = false;
 		}
 	}
 
-	private bool HasAnySourceHediff(CheckHediffMakeHediffDef rule)
+	private void QueueClassCleanup(Hediff hediff)
 	{
-		if (rule?.hediffDefs == null || activeRaceRuntime == null)
-		{
-			return false;
-		}
+		// Allocate at most once on the usual path; retain capacity across snapshots.
+		(classCleanup ??= new List<Hediff>(MihoFixState.ClassFamilyCount + 1)).Add(hediff);
+	}
 
-		for (int i = 0; i < rule.hediffDefs.Count; i++)
+	private bool HasAnySourceHediff(MihoRuleRuntime rule)
+	{
+		int[] indexes = rule.SourceIndexes;
+		for (int i = 0; i < indexes.Length; i++)
 		{
-			HediffDef hediffDef = rule.hediffDefs[i];
-			if (hediffDef != null && activeRaceRuntime.TryGetSourceIndex(hediffDef, out int sourceIndex) && presentSourceDefs[sourceIndex])
+			if (presentSourceDefs[indexes[i]])
 			{
 				return true;
 			}
 		}
-
 		return false;
 	}
 
 	private void EnsureSourceBuffer()
 	{
+		int starterCount = activeRaceRuntime?.HasClassRules == true ? MihoFixState.ClassFamilyCount : 0;
+		if (classStarters.Length != starterCount)
+		{
+			classStarters = starterCount == 0 ? Array.Empty<Hediff>() : new Hediff[starterCount];
+		}
 		int count = activeRaceRuntime?.RelevantSourceCount ?? 0;
 		if (presentSourceDefs == null || presentSourceDefs.Length != count)
 		{
@@ -295,7 +327,7 @@ public class Comp_MihoHediffAggregator : ThingComp
 		}
 	}
 
-	private void InitializeRemainingRuleTicks(List<CheckHediffMakeHediffDef> rules)
+	private void InitializeRemainingRuleTicks(List<MihoRuleRuntime> rules)
 	{
 		int[] previousTicks = remainingRuleTicks;
 		if (previousTicks == null || previousTicks.Length != rules.Count)
@@ -314,9 +346,9 @@ public class Comp_MihoHediffAggregator : ThingComp
 				continue;
 			}
 
-			CheckHediffMakeHediffDef rule = rules[i];
-			int resetTicks = Math.Max(rule.tickMultiflier, MihoFixState.AggregatorBucketTicks);
-			if (!string.IsNullOrEmpty(rule.defName) && legacyRemainingTicksByRule.TryGetValue(rule.defName, out int legacyTicks) && legacyTicks > 0)
+			MihoRuleRuntime rule = rules[i];
+			int resetTicks = rule.ResetTicks;
+			if (!string.IsNullOrEmpty(rule.Def.defName) && legacyRemainingTicksByRule.TryGetValue(rule.Def.defName, out int legacyTicks) && legacyTicks > 0)
 			{
 				remainingRuleTicks[i] = legacyTicks;
 				continue;
@@ -328,22 +360,43 @@ public class Comp_MihoHediffAggregator : ThingComp
 		legacyRemainingTicksByRule.Clear();
 	}
 
-	private void ApplyRule(CheckHediffMakeHediffDef rule)
+	private void ApplyRule(MihoRuleRuntime rule)
 	{
-		if (pawn?.health == null || rule?.makeHediffDefs == null || rule.hediffSeverity <= 0f)
+		if (rule.Def.hediffSeverity <= 0f)
 		{
 			return;
 		}
-
-		for (int i = 0; i < rule.makeHediffDefs.Count; i++)
+		MihoRuleOutput[] outputs = rule.Outputs;
+		for (int i = 0; i < outputs.Length; i++)
 		{
-			HediffDef hediffDef = rule.makeHediffDefs[i];
-			if (hediffDef == null)
+			MihoRuleOutput output = outputs[i];
+			if (output.StarterIndex < 0)
+			{
+				HealthUtility.AdjustSeverity(pawn, output.Def, rule.Def.hediffSeverity);
+				continue;
+			}
+			if (hasClass)
 			{
 				continue;
 			}
-
-			HealthUtility.AdjustSeverity(pawn, hediffDef, rule.hediffSeverity);
+			Hediff existing = classStarters[output.StarterIndex];
+			if (existing != null)
+			{
+				// Repair legacy overfilled starters without topping up a progressing one.
+				if (existing.Severity > 1f)
+				{
+					existing.Severity = 1f;
+				}
+				continue;
+			}
+			if (hasStarter)
+			{
+				continue;
+			}
+			HealthUtility.AdjustSeverity(pawn, output.Def, Math.Min(rule.Def.hediffSeverity, 1f));
+			classStarters[output.StarterIndex] = pawn.health.hediffSet.GetFirstHediffOfDef(output.Def);
+			// Later outputs/rules in this same interval must see the newly started class.
+			hasStarter = true;
 		}
 	}
 }
