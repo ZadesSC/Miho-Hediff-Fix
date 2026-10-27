@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <ProbeTargetFramework Condition="'$(ProbeTargetFramework)' == ''">netstandard2.1</ProbeTargetFramework>
+    <TargetFramework>$(ProbeTargetFramework)</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AssemblyName>MihoRuntimeProbe</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp"><HintPath>$(GameManaged)/Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="$(GameManaged)/UnityEngine*.dll"><Private>false</Private></Reference>
+    <Reference Include="UnityStubs" Condition="Exists('$(GameManaged)/UnityStubs.dll')"><HintPath>$(GameManaged)/UnityStubs.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Waylith" Condition="Exists('$(GameManaged)/Waylith.dll')"><HintPath>$(GameManaged)/Waylith.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(HarmonyAssembly)</HintPath><Private>false</Private></Reference>
+    <Reference Include="CheckHediffMakeHediff"><HintPath>$(MihoAssembly)</HintPath><Private>false</Private></Reference>
+    <Reference Include="MihoHediffFix"><HintPath>$(ModAssembly)</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

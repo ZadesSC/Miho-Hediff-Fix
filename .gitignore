@@ -7,3 +7,5 @@ Source/obj/
 /release-notes.txt
 __pycache__/
 *.pyc
+Tests/**/bin/
+Tests/**/obj/

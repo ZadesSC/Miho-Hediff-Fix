@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using CheckHediffMakeHediff;
 using HarmonyLib;
 using RimWorld;
@@ -83,6 +84,15 @@ internal static class MihoFixState
 
 	internal static void Initialize()
 	{
+		// Recent Miho builds include their own aggregator. Initialize it first so
+		// replacement is independent of startup-constructor ordering; leave its
+		// unrelated patches enabled.
+		Type upstreamBootstrap = AccessTools.TypeByName("MihoOptimization.MihoOptimizationCore");
+		if (upstreamBootstrap != null)
+		{
+			RuntimeHelpers.RunClassConstructor(upstreamBootstrap.TypeHandle);
+		}
+
 		RulesByRace.Clear();
 
 		foreach (CheckHediffMakeHediffDef rule in DefDatabase<CheckHediffMakeHediffDef>.AllDefsListForReading)
@@ -104,7 +114,8 @@ internal static class MihoFixState
 		foreach (KeyValuePair<ThingDef, MihoRaceRuntime> entry in RulesByRace)
 		{
 			List<CompProperties> comps = entry.Key.comps ?? (entry.Key.comps = new List<CompProperties>());
-			comps.RemoveAll(static comp => comp is CompProperties_CheckHediffMakeHediff);
+			comps.RemoveAll(static comp => comp is CompProperties_CheckHediffMakeHediff
+				|| comp.compClass?.FullName == "MihoOptimization.Comp_MihoHediffAggregator");
 			if (!comps.Any(static comp => comp is CompProperties_MihoHediffAggregator))
 			{
 				comps.Add(new CompProperties_MihoHediffAggregator());

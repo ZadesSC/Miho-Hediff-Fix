@@ -1,11 +1,11 @@
 {
   "assemblies": {
-    "1.6/Assemblies/MihoHediffFix.dll": "859f6d241c82629ac6de79400bf9e79696cf5f0d9bbb449c9da1c1f2dc719e84"
+    "Assemblies/MihoHediffFix.dll": "6927a97e7185de69b72e4c122901923fcde6f97be9f95026c8d4258fa9d6719f"
   },
   "provenance": "Committed source/assembly baseline; not proof of compilation. Refresh only after rebuilding and validating the assemblies.",
   "schemaVersion": 1,
   "sources": {
-    "Source/MihoHediffFix.cs": "e89128b8bb024224037e5e3f7eae0b5355fb20a2f650e296c55419bb7bb14708",
-    "Source/MihoHediffFix.csproj": "77239d767b2e688285617030fb190d6b9c52168b393a7a81d36c02c20a567bf4"
+    "Source/MihoHediffFix.cs": "e5c9181a32bfcee04a42ac8353d876724facba4957f89e10be004bc05e5eebd7",
+    "Source/MihoHediffFix.csproj": "4dd632d4fc30e675e46be2d00e29aa307fbba012a741ed7ee26d5cf22b0db27b"
   }
 }
